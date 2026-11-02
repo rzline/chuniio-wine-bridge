@@ -1,0 +1,5 @@
+# RPunithm slider only. Install before 73-seat-late.rules applies uaccess ACLs.
+# USB device VID/PID and USB interface attributes live on different ancestors,
+# so they must NOT be combined in a single ATTRS rule.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1973", ATTRS{idProduct}=="2001", ENV{CHUNI_RPUNITHM}="1"
+SUBSYSTEM=="hidraw", ENV{CHUNI_RPUNITHM}=="1", ATTRS{bInterfaceNumber}=="02", TAG+="uaccess"

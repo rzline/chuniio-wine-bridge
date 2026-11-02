@@ -1,0 +1,6 @@
+/target/
+/references/*
+!/references/README.md
+*.log
+/artifacts/
+__pycache__/
