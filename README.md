@@ -1,4 +1,6 @@
-# ChuniTool
+# chuniio-wine-bridge
+
+[**English**](README.en.md) | 简体中文
 
 面向 **Linux + Wine** 环境的 RPunithm 手台桥接工具，通过文件共享内存在 Linux 原生 HID 访问与 Wine 侧 `chuniio` 接口之间传递输入和灯光数据。
 
@@ -67,6 +69,8 @@ pkg-config --modversion hidapi-hidraw
 以下命令均在项目根目录执行。**不要以 root 身份运行桥接程序或游戏。**
 
 ### 1. 构建程序
+
+> 也可以直接从 [GitHub Releases](../../releases) 下载预编译的 `chuni-bridge-probe`、32/64 位 `chuniio.dll` 与 udev 规则包。
 
 ```sh
 cargo build --locked --release

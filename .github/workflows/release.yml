@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-package:
+    name: Build & Package (Linux + Wine DLLs)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libhidapi-dev \
+            clang \
+            lld \
+            llvm \
+            wine64-development \
+            libwine-dev
+
+      - name: Install Rust toolchain (stable >= 1.89)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run format, clippy, and unit tests
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked --all-targets
+          cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Build Linux release binary
+        run: |
+          cargo build --locked --release
+
+      - name: Build 32-bit and 64-bit Wine chuniio DLLs
+        run: |
+          sh tools/build_chuniio.sh /usr
+
+      - name: Run synthetic shared-memory self-test
+        run: |
+          TEST_DIR="$(mktemp -d)"
+          ./target/release/chuni-bridge-probe produce \
+            --path "$TEST_DIR/input" --duration-secs 6 > "$TEST_DIR/producer.log" &
+          PRODUCER_PID=$!
+          ./target/release/chuni-bridge-probe read \
+            --path "$TEST_DIR/input" --verify-synthetic --duration-secs 3
+          wait "$PRODUCER_PID"
+          rm -rf "$TEST_DIR"
+
+      - name: Package release archive
+        run: |
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          PKG_NAME="chuniio-wine-bridge-${VERSION}-linux-x86_64"
+          STAGE="dist/${PKG_NAME}"
+          mkdir -p "${STAGE}/bin" "${STAGE}/wine/x86" "${STAGE}/wine/x64" "${STAGE}/udev"
+
+          cp target/release/chuni-bridge-probe "${STAGE}/bin/"
+          cp target/chuniio/x86/chuniio.dll "${STAGE}/wine/x86/"
+          cp target/chuniio/x86/chuniio-probe.exe "${STAGE}/wine/x86/"
+          cp target/chuniio/x64/chuniio.dll "${STAGE}/wine/x64/"
+          cp target/chuniio/x64/chuniio-probe.exe "${STAGE}/wine/x64/"
+          cp packaging/udev/70-rpunithm-slider.rules "${STAGE}/udev/"
+          cp README.md README.en.md "${STAGE}/"
+
+          tar -C dist -czvf "dist/${PKG_NAME}.tar.gz" "${PKG_NAME}"
+          (cd dist && sha256sum "${PKG_NAME}.tar.gz" > "${PKG_NAME}.tar.gz.sha256")
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chuniio-wine-bridge-dist
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
