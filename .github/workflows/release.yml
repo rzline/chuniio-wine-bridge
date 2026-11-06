@@ -71,13 +71,21 @@ jobs:
 
       - name: Run synthetic shared-memory self-test
         run: |
+          set +e
           TEST_DIR="$(mktemp -d)"
           ./target/release/chuni-bridge-probe produce \
-            --path "$TEST_DIR/input" --duration-secs 6 > "$TEST_DIR/producer.log" &
+            --path "$TEST_DIR/input" --duration-secs 6 > "$TEST_DIR/producer.log" 2>&1 &
           PRODUCER_PID=$!
           ./target/release/chuni-bridge-probe read \
-            --path "$TEST_DIR/input" --verify-synthetic --duration-secs 3
+            --path "$TEST_DIR/input" --verify-synthetic --duration-secs 3 > /tmp/read.log 2>&1
+          READ_RC=$?
           wait "$PRODUCER_PID"
+          PROD_RC=$?
+          if [ "$READ_RC" -ne 0 ] || [ "$PROD_RC" -ne 0 ]; then
+            ERR=$(cat "$TEST_DIR/producer.log" /tmp/read.log | tr '\n' ' ')
+            echo "::error title=SelfTestFailed::read=$READ_RC prod=$PROD_RC $ERR"
+            exit 1
+          fi
           rm -rf "$TEST_DIR"
 
       - name: Package release archive
