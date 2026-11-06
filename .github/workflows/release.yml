@@ -26,7 +26,6 @@ jobs:
             clang \
             lld \
             llvm \
-            wine64-development \
             libwine-dev
 
       - name: Install Rust toolchain (stable >= 1.89)
