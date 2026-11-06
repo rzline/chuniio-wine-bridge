@@ -41,7 +41,11 @@ jobs:
 
       - name: Build Linux release binary
         run: |
-          cargo build --locked --release
+          if ! cargo build --locked --release 2>&1 | tee /tmp/cargo.log; then
+            ERR=$(tail -n 30 /tmp/cargo.log | tr '\n' ' ')
+            echo "::error title=CargoBuildFailed::$ERR"
+            exit 1
+          fi
 
       - name: Build 32-bit and 64-bit Wine chuniio DLLs
         run: |
@@ -58,7 +62,11 @@ jobs:
             ln -s "$WIN_DIR" "$WINE_TREE/include/wine"
             WINE_ROOT="$WINE_TREE"
           fi
-          sh tools/build_chuniio.sh "$WINE_ROOT"
+          if ! sh tools/build_chuniio.sh "$WINE_ROOT" 2>&1 | tee /tmp/dll.log; then
+            ERR=$(tail -n 30 /tmp/dll.log | tr '\n' ' ')
+            echo "::error title=DllBuildFailed::$ERR"
+            exit 1
+          fi
           rm -rf "$WINE_TREE"
 
       - name: Run synthetic shared-memory self-test
