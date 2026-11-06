@@ -36,22 +36,36 @@ jobs:
       - name: Cache Cargo registry and target
         uses: Swatinem/rust-cache@v2
 
-      - name: Run format, clippy, and unit tests
+      - name: Build and Verify
         run: |
+          echo "::group::Environment"
+          rustc --version
+          cargo --version
+          pkg-config --modversion hidapi-hidraw
+          clang --version
+          lld-link --version
+          echo "::endgroup::"
+
+          echo "::group::Format, Clippy & Unit Tests"
           cargo fmt --all -- --check
           cargo test --locked --all-targets
           cargo clippy --locked --all-targets -- -D warnings
+          echo "::endgroup::"
 
-      - name: Build Linux release binary
-        run: |
+          echo "::group::Build Linux Release Binary"
           cargo build --locked --release
+          echo "::endgroup::"
 
-      - name: Build 32-bit and 64-bit Wine chuniio DLLs
-        run: |
-          sh tools/build_chuniio.sh /usr
+          echo "::group::Build 32-bit and 64-bit Wine chuniio DLLs"
+          WINE_ROOT="/usr"
+          if [ ! -d "/usr/include/wine/windows" ]; then
+            WINE_INC=$(find /usr/include -type d -path "*/wine/windows" | head -n 1)
+            echo "Found Wine headers at: $WINE_INC"
+          fi
+          sh tools/build_chuniio.sh "$WINE_ROOT"
+          echo "::endgroup::"
 
-      - name: Run synthetic shared-memory self-test
-        run: |
+          echo "::group::Synthetic Shared-Memory Self-Test"
           TEST_DIR="$(mktemp -d)"
           ./target/release/chuni-bridge-probe produce \
             --path "$TEST_DIR/input" --duration-secs 6 > "$TEST_DIR/producer.log" &
@@ -60,9 +74,9 @@ jobs:
             --path "$TEST_DIR/input" --verify-synthetic --duration-secs 3
           wait "$PRODUCER_PID"
           rm -rf "$TEST_DIR"
+          echo "::endgroup::"
 
-      - name: Package release archive
-        run: |
+          echo "::group::Package Release Archive"
           VERSION="${GITHUB_REF_NAME:-dev}"
           PKG_NAME="chuniio-wine-bridge-${VERSION}-linux-x86_64"
           STAGE="dist/${PKG_NAME}"
@@ -78,6 +92,7 @@ jobs:
 
           tar -C dist -czvf "dist/${PKG_NAME}.tar.gz" "${PKG_NAME}"
           (cd dist && sha256sum "${PKG_NAME}.tar.gz" > "${PKG_NAME}.tar.gz.sha256")
+          echo "::endgroup::"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
