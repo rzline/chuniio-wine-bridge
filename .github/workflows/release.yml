@@ -41,14 +41,16 @@ jobs:
 
       - name: Build Linux release binary
         run: |
+          set -o pipefail
           if ! cargo build --locked --release 2>&1 | tee /tmp/cargo.log; then
-            ERR=$(tail -n 30 /tmp/cargo.log | tr '\n' ' ')
+            ERR=$(tail -n 35 /tmp/cargo.log | tr '\n' ' ')
             echo "::error title=CargoBuildFailed::$ERR"
             exit 1
           fi
 
       - name: Build 32-bit and 64-bit Wine chuniio DLLs
         run: |
+          set -o pipefail
           WINE_TREE="$(mktemp -d)"
           if [ -d "/usr/include/wine/windows" ]; then
             WINE_ROOT="/usr"
@@ -63,7 +65,7 @@ jobs:
             WINE_ROOT="$WINE_TREE"
           fi
           if ! sh tools/build_chuniio.sh "$WINE_ROOT" 2>&1 | tee /tmp/dll.log; then
-            ERR=$(tail -n 30 /tmp/dll.log | tr '\n' ' ')
+            ERR=$(tail -n 35 /tmp/dll.log | tr '\n' ' ')
             echo "::error title=DllBuildFailed::$ERR"
             exit 1
           fi
@@ -71,21 +73,13 @@ jobs:
 
       - name: Run synthetic shared-memory self-test
         run: |
-          set +e
           TEST_DIR="$(mktemp -d)"
           ./target/release/chuni-bridge-probe produce \
-            --path "$TEST_DIR/input" --duration-secs 6 > "$TEST_DIR/producer.log" 2>&1 &
+            --path "$TEST_DIR/input" --duration-secs 6 > "$TEST_DIR/producer.log" &
           PRODUCER_PID=$!
           ./target/release/chuni-bridge-probe read \
-            --path "$TEST_DIR/input" --verify-synthetic --duration-secs 3 > /tmp/read.log 2>&1
-          READ_RC=$?
+            --path "$TEST_DIR/input" --verify-synthetic --duration-secs 3
           wait "$PRODUCER_PID"
-          PROD_RC=$?
-          if [ "$READ_RC" -ne 0 ] || [ "$PROD_RC" -ne 0 ]; then
-            ERR=$(cat "$TEST_DIR/producer.log" /tmp/read.log | tr '\n' ' ')
-            echo "::error title=SelfTestFailed::read=$READ_RC prod=$PROD_RC $ERR"
-            exit 1
-          fi
           rm -rf "$TEST_DIR"
 
       - name: Package release archive
